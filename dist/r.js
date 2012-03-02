@@ -7275,7 +7275,6 @@ define('parse', ['./uglifyjs/index'], function (uglify) {
                     if (!(deps = validateDeps(deps))) {
                         return null;
                     }
-
                     return onMatch("require", null, null, deps);
 
                 } else if (call[0] === 'name' && call[1] === 'define') {
@@ -7314,7 +7313,6 @@ define('parse', ['./uglifyjs/index'], function (uglify) {
                                 deps = toAstArray(cjsDeps);
                             }
                         }
-
                         return onMatch("define", null, name, deps);
                     }
                 }
@@ -7962,6 +7960,28 @@ function (lang,   logger,   envOptimize,        file,           parse,
                                        keepLines, config, pluginCollector);
 
             file.saveUtf8File(outFileName, fileContents);
+        },
+        
+        createFileFromFiles: function (outFileName, files, config, moduleName, pluginCollector) {
+            var parts = (config.optimize + "").split('.'),
+                optimizerName = parts[0],
+                keepLines = parts[1] === 'keepLines',
+                fileContents;
+
+            var fileContents = '';
+
+            files.forEach( function( file ) {
+                var data = fs.readFileSync( file );
+                
+                fileContents += 'define(\'text!'+file.substring( file.indexOf('templates') )+'\',[],function(){ return \'';
+                fileContents += (data+'').replace(/\n/g,'')
+                                   .replace(/[\\"']/g, '\\$&')
+                                   .replace(/\u0000/g, '\\0');                
+                fileContents += '\';}),';
+            });
+            fileContents = fileContents.substring(0,fileContents.length-1);
+            
+            file.saveUtf8File(outFileName, fileContents);            
         },
 
         /**
@@ -8716,6 +8736,7 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
         if (config.logLevel) {
             logger.logLevel(config.logLevel);
         }
+        
 
         if (!config.out && !config.cssIn) {
             //This is not just a one-off file build but a full build profile, with
@@ -8767,6 +8788,7 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
                 }
             }
         }
+        
 
         //Figure out source file location for each module layer. Do this by seeding require
         //with source area configuration. This is needed so that later the module layers
@@ -8780,6 +8802,35 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
         });
         buildContext = require.s.contexts._;
         modules = config.modules;
+        
+        
+        if( config.includeTemplates ) {
+            var path = config.paths.templates;
+            
+            var templates = [];
+            var walkDirectory = function( path ) {
+                var dir = fs.readdirSync( path );
+                
+                dir.forEach( function( el ) {
+                    var stat = fs.statSync( path + '/' + el );
+                    if( stat.isDirectory() ) {
+                        walkDirectory( path + '/' + el );
+                    } else {
+                        if( el.indexOf( '.html' ) > -1 ){
+                            templates.push( path + '/' + el );
+                        }
+                    }
+                });
+            }
+            
+            walkDirectory( path );
+            
+            //console.log( optimize.jsFile( '/' ) );
+            //console.log( config );
+            optimize.createFileFromFiles( config.paths.templates + '/templates.js', templates, config );
+            
+            //console.log( parser.parse( 'hey    boo') );
+        }
 
         if (modules) {
             modules.forEach(function (module) {
@@ -8833,7 +8884,7 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
         if (config.optimizeCss && config.optimizeCss !== "none" && config.dir) {
             optimize.css(config.dir, config);
         }
-
+        
         if (modules) {
             //For each module layer, call require to calculate dependencies.
             modules.forEach(function (module) {
@@ -8854,6 +8905,7 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
                     });
                 }
             });
+            
 
             modules.forEach(function (module) {
                 if (module.exclude) {
@@ -8880,13 +8932,26 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
                         }
                     });
                 }
-                
-                if (module.includeOnly) {
+                /*if (module.includeOnly) {
                     //module.onlyInclude will only include specificed files.
                     //this will not include other dependencies                    
                     module.include.push( module._buildPath );
                     module.layer.buildFilePaths = module.include;
-                }
+                }*/
+                
+                /*if (module.textOnly) {                
+                    var include = [];
+
+                    module.layer.buildFilePaths.forEach( function( module ) {
+                        if( module.indexOf( "text!" ) > -1 ) {
+                            include.push( module );
+                        }
+                    });
+                    include.push( module._buildPath );
+                    module.layer.buildFilePaths = include;
+                }*/
+                
+                //console.log( module.layer.buildFilePaths );
 
                 //Flatten them and collect the build output for each module.
                 builtModule = build.flattenModule(module, module.layer, config);
@@ -9315,7 +9380,7 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
                     out: config.out,
                     include: config.include,
                     exclude: config.exclude,
-                    excludeShallow: config.excludeShallow
+                    excludeShallow: config.excludeShallow,
                 }
             ];
         }
@@ -9470,7 +9535,7 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
         }
 
         //Figure out module layer dependencies by calling require to do the work.
-        require(include);
+        require(include);       
 
         //Pull out the layer dependencies.
         layer.specified = context.specified;
