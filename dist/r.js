@@ -8881,13 +8881,11 @@ function (lang,   logger,   file,          parse,    optimize,   pragma,
                     });
                 }
                 
-                if(module.onlyInclude) {
+                if (module.includeOnly) {
                     //module.onlyInclude will only include specificed files.
-                    //this will not include other dependencies
-                    module.layer.buildFilePaths = [ module._buildPath ];
-                    module.onlyInclude.forEach( function( includeModule ) {
-                        module.layer.buildFilePaths.push( includeModule );
-                    })
+                    //this will not include other dependencies                    
+                    module.include.push( module._buildPath );
+                    module.layer.buildFilePaths = module.include;
                 }
 
                 //Flatten them and collect the build output for each module.
